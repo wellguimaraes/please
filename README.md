@@ -48,6 +48,11 @@ Written to `~/.config/please/`:
 | `key` | OpenRouter key, only if install had to ask |
 
 The shell function is linked from `~/.local/share/please/` back to this repo.
+Install writes this line into `~/.zshrc` and replaces it if it is already there:
+
+```bash
+source "$HOME/.local/share/please/please.zsh"
+```
 
 ## License
 

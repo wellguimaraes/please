@@ -128,29 +128,56 @@ ask_for_key() {
   echo "Saved the key to $CONFIG_DIR/key"
 }
 
+hook_source_line() {
+  local rel
+  if [[ "$PREFIX" == "$HOME"/* ]]; then
+    rel="${PREFIX#"$HOME"/}"
+    printf 'source "$HOME/%s/please.zsh"\n' "$rel"
+  else
+    printf 'source %q/please.zsh\n' "$PREFIX"
+  fi
+}
+
 hook_zshrc() {
   local begin="# please-cli"
   local end="# end please-cli"
-  local block
+  local source_line action
 
-  block=$(
-    cat <<EOF
-$begin
-source "$PREFIX/please.zsh"
-$end
-EOF
-  )
-
+  source_line="$(hook_source_line)"
   mkdir -p "$(dirname "$ZSHRC")"
   touch "$ZSHRC"
 
-  if grep -q "$begin" "$ZSHRC"; then
-    echo "zshrc already sources please."
-    return 0
-  fi
+  action="$(
+    PLEASE_HOOK_BEGIN="$begin" PLEASE_HOOK_END="$end" PLEASE_HOOK_SOURCE="$source_line" \
+      python3 - "$ZSHRC" <<'PY'
+import os
+import pathlib
+import re
+import sys
 
-  printf '\n%s\n' "$block" >>"$ZSHRC"
-  echo "Added please to $ZSHRC"
+path = pathlib.Path(sys.argv[1])
+begin = os.environ["PLEASE_HOOK_BEGIN"]
+end = os.environ["PLEASE_HOOK_END"]
+source_line = os.environ["PLEASE_HOOK_SOURCE"].rstrip("\n")
+block = f"{begin}\n{source_line}\n{end}"
+text = path.read_text() if path.exists() else ""
+pattern = re.compile(re.escape(begin) + r".*?" + re.escape(end), re.S)
+if pattern.search(text):
+    path.write_text(pattern.sub(block, text, count=1))
+    print("updated")
+else:
+    if text and not text.endswith("\n"):
+        text += "\n"
+    path.write_text(text + "\n" + block + "\n")
+    print("added")
+PY
+  )"
+
+  if [[ "$action" == "updated" ]]; then
+    echo "Updated please in $ZSHRC"
+  else
+    echo "Added please to $ZSHRC"
+  fi
 }
 
 mkdir -p "$PREFIX" "$CONFIG_DIR"
@@ -162,7 +189,7 @@ chmod +x "$REPO/bin/please-complete"
 
 ask_for_key
 agent="$(pick_agent)"
-printf 'PLEASE_AGENT=%q\n' "$agent" >"$CONFIG_DIR/config"
+printf 'PLEASE_AGENT=%s\n' "$agent" >"$CONFIG_DIR/config"
 echo "Agent: ${agent:-none}"
 
 hook_zshrc

@@ -12,18 +12,39 @@ else
 fi
 PLEASE_CONFIG_DIR="${PLEASE_CONFIG_DIR:-$HOME/.config/please}"
 
-if [[ -f "$PLEASE_CONFIG_DIR/config" ]]; then
-  source "$PLEASE_CONFIG_DIR/config"
-fi
-
 if [[ -z "${OPENROUTER_API_KEY:-}" && -f "$PLEASE_CONFIG_DIR/key" ]]; then
   OPENROUTER_API_KEY="$(<"$PLEASE_CONFIG_DIR/key")"
   export OPENROUTER_API_KEY
 fi
 
-please_run_agent() {
+_please_agent() {
+  local line value agent=""
+  if [[ -n "${PLEASE_AGENT:-}" && "$PLEASE_AGENT" == [A-Za-z0-9._-]## ]]; then
+    print -r -- "$PLEASE_AGENT"
+    return 0
+  fi
+  if [[ -f "$PLEASE_CONFIG_DIR/config" ]]; then
+    while IFS= read -r line || [[ -n "$line" ]]; do
+      [[ "$line" == PLEASE_AGENT=* ]] || continue
+      value="${line#PLEASE_AGENT=}"
+      if [[ "$value" == \'*\' ]]; then
+        value="${value#\'}"
+        value="${value%\'}"
+      elif [[ "$value" == \"*\" ]]; then
+        value="${value#\"}"
+        value="${value%\"}"
+      fi
+      if [[ "$value" == [A-Za-z0-9._-]## ]]; then
+        agent="$value"
+      fi
+    done < "$PLEASE_CONFIG_DIR/config"
+  fi
+  print -r -- "${agent:-pi}"
+}
+
+_please_run_agent() {
   local prompt="$1"
-  local agent="${PLEASE_AGENT:-pi}"
+  local agent="$2"
   case "$agent" in
     pi) command pi -- "$prompt" ;;
     claude) command claude -- "$prompt" ;;
@@ -56,7 +77,8 @@ please() {
 
   local payload cmd risk needs_context agent_prompt complete_status
   local spinner_pid complete_pid out interrupted reply
-  local agent="${PLEASE_AGENT:-pi}"
+  local agent
+  agent="$(_please_agent)"
   setopt localoptions nomonitor localtraps
   out="$(mktemp "${TMPDIR:-/tmp}/please.XXXXXX")" || return 1
   interrupted=0
@@ -118,7 +140,7 @@ please() {
     print -n "Start ${agent}? [y/N] "
     read -r reply
     if [[ "$reply" == [yY] || "$reply" == [yY][eE][sS] ]]; then
-      please_run_agent "$agent_prompt"
+      _please_run_agent "$agent_prompt" "$agent"
       return $?
     fi
     return 1
