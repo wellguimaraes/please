@@ -1,0 +1,33 @@
+{
+  "name": "@wellg/please",
+  "version": "0.1.0",
+  "description": "Turn a short request into a confirmed shell command.",
+  "type": "module",
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wellguimaraes/please.git"
+  },
+  "bin": {
+    "please-complete": "./dist/complete.js",
+    "please-setup": "./dist/setup.js"
+  },
+  "files": [
+    "dist",
+    "shell"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
+  },
+  "devDependencies": {
+    "@types/node": "^24.6.0",
+    "typescript": "^5.9.2"
+  }
+}

@@ -2,14 +2,6 @@
 # Source this file from ~/.zshrc. A function (not a plain alias) so the
 # command can run in the current shell.
 
-_please_here="${${(%):-%x}:A:h}"
-if [[ -x "$_please_here/please-complete" ]]; then
-  PLEASE_HOME="${PLEASE_HOME:-$_please_here}"
-elif [[ -x "$_please_here/../bin/please-complete" ]]; then
-  PLEASE_HOME="${PLEASE_HOME:-${_please_here}/../bin}"
-else
-  PLEASE_HOME="${PLEASE_HOME:-$HOME/.local/share/please}"
-fi
 PLEASE_CONFIG_DIR="${PLEASE_CONFIG_DIR:-$HOME/.config/please}"
 
 if [[ -z "${OPENROUTER_API_KEY:-}" && -f "$PLEASE_CONFIG_DIR/key" ]]; then
@@ -70,6 +62,11 @@ please() {
     return 1
   fi
 
+  if ! command -v please-complete >/dev/null; then
+    print -u2 "please: please-complete is not on PATH. Run: npm install -g @wellg/please"
+    return 1
+  fi
+
   if ! command -v jq >/dev/null; then
     print -u2 "please: jq is required"
     return 1
@@ -94,7 +91,7 @@ please() {
   } &
   spinner_pid=$!
 
-  "$PLEASE_HOME/please-complete" "$@" >"$out" &
+  command please-complete "$@" >"$out" &
   complete_pid=$!
   trap '
     interrupted=1
