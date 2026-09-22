@@ -12,8 +12,8 @@
     "url": "git+https://github.com/wellguimaraes/please.git"
   },
   "bin": {
-    "please-complete": "./dist/complete.js",
-    "please-setup": "./dist/setup.js"
+    "please-complete": "dist/complete.js",
+    "please-setup": "dist/setup.js"
   },
   "files": [
     "dist",
