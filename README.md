@@ -1,5 +1,8 @@
 # please
 
+Your mother taught you to say please. Your terminal finally listens. Ask
+nicely, review the command like you understand it, press `y`.
+
 Turn a short request into a shell command. Review it, confirm it, run it.
 
 ```bash
