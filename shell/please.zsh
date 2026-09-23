@@ -88,6 +88,14 @@ please() {
     return 1
   fi
 
+  # Flags run without jq, setup, or an API key. The Node bin owns them.
+  case "$1" in
+    --help|-h|--version|-V|--update)
+      command please "$1"
+      return $?
+      ;;
+  esac
+
   if ! command -v jq >/dev/null; then
     print -u2 "please: jq is required"
     return 1
@@ -188,7 +196,7 @@ please() {
 
   print
   if [[ "$risk" == "safe" ]]; then
-    printf '\033[1;30;48;2;74;222;128m safe \033[0m \033[38;2;74;222;128m%s\033[0m\n' "$cmd"
+    printf '\033[1;38;2;0;0;0;48;2;74;222;128m safe \033[0m \033[38;2;74;222;128m%s\033[0m\n' "$cmd"
   else
     printf '\033[1;97;48;2;255;99;71m risky \033[0m \033[38;2;255;99;71m%s\033[0m\n' "$cmd"
   fi

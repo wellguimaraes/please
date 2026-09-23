@@ -47,6 +47,14 @@ please-setup --agent pi
 `please` is a zsh function so the command can run in your current shell. Keep
 the npm global bin directory on your `PATH`.
 
+## Options
+
+```bash
+please --help      # Show help
+please --version   # Show the installed version
+please --update    # Install the latest version, then reload with source ~/.zshrc
+```
+
 ## Config
 
 Written to `~/.config/please/`:
