@@ -74,6 +74,30 @@ _please_run_agent() {
   esac
 }
 
+# Confirm. On a terminal, one keypress decides: y runs, anything else exits,
+# and ESC exits at once without waiting for Enter. On a pipe, read one line
+# so scripts can still answer.
+_please_confirm() {
+  local prompt="$1"
+  local reply rest
+  print -n "$prompt"
+  if [[ -t 0 ]]; then
+    read -k 1 reply || { print; return 1; }
+    if [[ "$reply" == $'\e' ]]; then
+      # Drain the rest of any escape sequence so it does not leak to the prompt.
+      # One char at a time: the timeout only covers the wait for the first char.
+      while read -t 0.05 -k 1 rest 2>/dev/null; do :; done
+      print
+      return 1
+    fi
+    print
+    [[ "$reply" == [yY] ]]
+  else
+    read -r reply || return 1
+    [[ "$reply" == [yY] || "$reply" == [yY][eE][sS] ]]
+  fi
+}
+
 unalias please 2>/dev/null
 unalias pls 2>/dev/null
 
@@ -115,7 +139,7 @@ please() {
   fi
 
   local payload cmd risk needs_context agent_prompt complete_status
-  local spinner_pid complete_pid out interrupted reply
+  local spinner_pid complete_pid out interrupted
   local agent model
   agent="$(_please_agent)"
   model="$(_please_model)"
@@ -180,9 +204,7 @@ please() {
     print
     print -r -- "$agent_prompt"
     print
-    print -n "Start ${agent}? [y/N] "
-    read -r reply
-    if [[ "$reply" == [yY] || "$reply" == [yY][eE][sS] ]]; then
+    if _please_confirm "Start ${agent}? [y/N] "; then
       _please_run_agent "$agent_prompt" "$agent"
       return $?
     fi
@@ -201,9 +223,7 @@ please() {
     printf '\033[1;97;48;2;255;99;71m risky \033[0m \033[38;2;255;99;71m%s\033[0m\n' "$cmd"
   fi
   print
-  print -n "Run this command? [y/N] "
-  read -r reply
-  if [[ "$reply" == [yY] || "$reply" == [yY][eE][sS] ]]; then
+  if _please_confirm "Run this command? [y/N] "; then
     eval "$cmd"
   else
     return 1
