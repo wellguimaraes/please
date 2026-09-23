@@ -94,7 +94,7 @@ function ensureZsh(): void {
     return;
   }
   console.error(`please: zsh is required, but your shell is ${shell}.`);
-  console.error("Switch to zsh, then run please-setup again.");
+  console.error("Switch to zsh, then run please --setup again.");
   process.exit(1);
 }
 

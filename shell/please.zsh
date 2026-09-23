@@ -118,6 +118,13 @@ please() {
       command please "$1"
       return $?
       ;;
+    --setup)
+      local setup_status
+      command please "$@"
+      setup_status=$?
+      _please_load_key
+      return $setup_status
+      ;;
   esac
 
   if ! command -v jq >/dev/null; then

@@ -1,60 +1,88 @@
 # please
 
-Turn a short request into a shell command. Confirm before it runs. If the
-request needs files or folders first, confirm and start a coding agent.
+Turn a short request into a shell command. Review it, confirm it, run it.
 
 ```bash
-please print the current directory
-pls list files in this folder
+please show disk usage for this folder
+pls find large files in /tmp
 please fix the failing test in this repo
 ```
 
-Uses OpenRouter and your `OPENROUTER_API_KEY`. The default model is
-`z-ai/glm-5.3:nitro` (`:nitro` routes to the fastest providers).
+`please` prints one command with a risk badge: green `safe` or tomato
+`risky`. Press `y` to run it. Enter or ESC exits without running anything.
+
+When a request needs files or folders first, `please` hands off to a coding
+agent instead. It shows the agent prompt and asks before it starts the agent.
 
 ## Install
 
 Needs Node.js 18+, `jq`, and zsh. Works on macOS and Linux. Other shells
 are not supported.
 
+npm:
+
 ```bash
 npm install -g @wellg/please
-please
 ```
 
-The first run asks for:
+pnpm:
 
-1. An OpenRouter API key. If a key is already set, it asks whether to keep it
-2. A default OpenRouter model (`z-ai/glm-5.3:nitro` is prefilled)
-3. A default agent from the ones it finds on your PATH (`pi`, `claude`,
-   `codex`, `cursor-agent`, `prime-agent`, `command-code`). That agent is used
-   when a request needs files, folders, or more context
+```bash
+pnpm add -g @wellg/please
+```
 
-Each answer is saved before the next question.
+Yarn Classic:
 
-Then reload:
+```bash
+yarn global add @wellg/please
+```
+
+Then reload your shell:
 
 ```bash
 source ~/.zshrc
 ```
 
-`please-setup` still works for the same wizard. To pick an agent without the
-list:
+## Setup
+
+The first `please` run starts the setup wizard. It asks for:
+
+1. An OpenRouter API key. If a key is already set, it asks whether to keep
+   it.
+2. A default OpenRouter model (`z-ai/glm-5.3:nitro` is prefilled; `:nitro`
+   routes to the fastest providers).
+3. A default agent from the ones on your PATH (`pi`, `claude`, `codex`,
+   `cursor-agent`, `prime-agent`, `command-code`). The agent runs when a
+   request needs files, folders, or more context.
+
+Each answer is saved before the next question. To run setup again later:
 
 ```bash
-please-setup --agent pi
+please --setup
+please --setup --agent pi   # skip the agent picker
 ```
-
-`please` is a zsh function so the command can run in your current shell. Keep
-the npm global bin directory on your `PATH`.
 
 ## Options
 
 ```bash
 please --help      # Show help
 please --version   # Show the installed version
-please --update    # Install the latest version, then reload with source ~/.zshrc
+please --update    # Install the latest version
+please --setup     # Run the setup wizard again
 ```
+
+After `--update`, reload with `source ~/.zshrc`.
+
+## How it works
+
+`please` is a zsh function, so commands run in your current shell. Setup adds
+one line to `~/.zshrc` (and replaces it if it is already there):
+
+```bash
+source "$(please-setup zsh-path)"
+```
+
+Keep the global bin directory on your `PATH`.
 
 ## Config
 
@@ -65,11 +93,8 @@ Written to `~/.config/please/`:
 | `config` | `PLEASE_AGENT` and `PLEASE_MODEL` |
 | `key` | OpenRouter key, if setup saved one |
 
-Setup writes this line into `~/.zshrc` and replaces it if it is already there:
-
-```bash
-source "$(please-setup zsh-path)"
-```
+You can also set `OPENROUTER_API_KEY`, `PLEASE_MODEL`, or `PLEASE_AGENT` in
+your environment. The environment wins over the files.
 
 ## License
 

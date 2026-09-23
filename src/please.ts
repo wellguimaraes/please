@@ -22,13 +22,11 @@ Examples:
   please fix the failing test in this repo
 
 Options:
-  --help       Show this help and exit.
-  --version    Show the installed version and exit.
-  --update     Install the latest ${PACKAGE_NAME} and exit.
-
-Setup:
-  please-setup              Run the setup wizard again.
-  please-setup --agent pi   Set the agent without the list.`);
+  --help                Show this help and exit.
+  --version             Show the installed version and exit.
+  --update              Install the latest ${PACKAGE_NAME} and exit.
+  --setup               Run the setup wizard again.
+  --setup --agent NAME  Run setup with this agent. It must be on PATH.`);
 }
 
 function printVersion(): void {
@@ -64,6 +62,35 @@ if (first === "--version" || first === "-V") {
 
 if (first === "--update") {
   runUpdate();
+  process.exit(0);
+}
+
+async function runSetupFlag(argv: string[]): Promise<void> {
+  let agent = "";
+  const rest = argv.slice(1);
+  for (let i = 0; i < rest.length; i += 1) {
+    const arg = rest[i];
+    if (arg === "--agent") {
+      const value = rest[i + 1];
+      if (!value) {
+        console.error("please: --setup --agent needs a name");
+        process.exit(1);
+      }
+      agent = value;
+      i += 1;
+      continue;
+    }
+    console.error(`please: unknown argument: ${arg}`);
+    console.error("usage: please --setup [--agent NAME]");
+    process.exit(1);
+  }
+  await runSetup({ agent });
+  console.log("");
+  console.log("Reload your shell: source ~/.zshrc");
+}
+
+if (first === "--setup") {
+  await runSetupFlag(args);
   process.exit(0);
 }
 
