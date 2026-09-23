@@ -188,9 +188,9 @@ please() {
 
   print
   if [[ "$risk" == "safe" ]]; then
-    printf '\033[1;97;48;2;74;222;128m safe \033[0m \033[38;2;74;222;128m%s\033[0m\n' "$cmd"
+    printf '\033[1;30;48;2;74;222;128m safe \033[0m \033[38;2;74;222;128m%s\033[0m\n' "$cmd"
   else
-    printf '\033[1;97;48;2;239;68;68m risky \033[0m \033[38;2;239;68;68m%s\033[0m\n' "$cmd"
+    printf '\033[1;97;48;2;255;99;71m risky \033[0m \033[38;2;255;99;71m%s\033[0m\n' "$cmd"
   fi
   print
   print -n "Run this command? [y/N] "
