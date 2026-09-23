@@ -51,10 +51,11 @@ function parseArgs(argv: string[]): { agent: string; zshPathOnly: boolean } {
 function hookZshrc(): void {
   const begin = "# please-cli";
   const end = "# end please-cli";
-  // Resolve the absolute path now, while node is known to work. Shell
-  // startup then needs neither node nor PATH for the common case; the
-  // dynamic lookup stays as a fallback (e.g. after `please --update`
-  // moves the package). Throws here instead of writing a broken hook.
+  // Dynamic lookup first so updates take effect: package managers like
+  // pnpm keep old versioned paths around, so a pinned absolute path
+  // would load stale code forever. The absolute path (resolved now, while
+  // node is known to work) is only a fallback for shells where the binary
+  // is missing or broken. Throws here instead of writing a broken hook.
   let abs: string;
   try {
     abs = quoteZsh(packageZshPath());
@@ -64,7 +65,8 @@ function hookZshrc(): void {
     process.exit(1);
   }
   const sourceLine =
-    `if [[ -f ${abs} ]]; then\n  source ${abs}\nelif command -v please-setup >/dev/null 2>&1; then\n  source "$(please-setup zsh-path)" 2>/dev/null || true\nfi`;
+    'if command -v please-setup >/dev/null 2>&1; then\n  source "$(please-setup zsh-path)" 2>/dev/null || true\nfi\n' +
+    `if ! command -v please >/dev/null 2>&1 && [[ -f ${abs} ]]; then\n  source ${abs} 2>/dev/null || true\nfi`;
   const block = `${begin}\n${sourceLine}\n${end}`;
   const text = existsSync(ZSHRC) ? readFileSync(ZSHRC, "utf8") : "";
   const pattern = new RegExp(
