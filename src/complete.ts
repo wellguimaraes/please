@@ -18,7 +18,7 @@ const RESPONSE_FORMAT = {
         command: {
           type: "string",
           description:
-            `A single zsh command for ${PLATFORM}. No markdown, no explanation, and no quotes around the whole command. Empty if needs_context is true.`,
+            `A single zsh command for ${PLATFORM}. Quote paths and arguments that can contain spaces or special characters. No markdown, no explanation, and no quotes around the whole command. Empty if needs_context is true.`,
         },
         risk: {
           type: "string",
@@ -162,6 +162,9 @@ When needs_context is false:
   harmless commands.
 
 Prefer common, safe commands for ${PLATFORM}.
+Quote file paths and arguments that can contain spaces or shell
+special characters. Use single quotes for literal text and double
+quotes when a variable must expand.
 Use the current directory unless the user asks otherwise.
 If the request cannot be turned into a command and also does not need project
 context, set command to:
