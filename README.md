@@ -105,6 +105,13 @@ Written to `~/.config/please/`:
 | --- | --- |
 | `config` | `PLEASE_AGENT` and `PLEASE_MODEL` |
 | `key` | OpenRouter key, if setup saved one |
+| `cache.json` | Latest 30 accepted commands, most recent first |
+
+## Cache
+
+Accepted commands are remembered (request + working directory). Re-running
+the same request in the same directory replays instantly with no model call.
+Answering `N` to a cached command forgets it. Delete `cache.json` to clear.
 
 You can also set `OPENROUTER_API_KEY`, `PLEASE_MODEL`, or `PLEASE_AGENT` in
 your environment. The environment wins over the files.

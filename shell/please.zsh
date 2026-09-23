@@ -98,6 +98,65 @@ _please_confirm() {
   fi
 }
 
+# Command cache: the latest accepted commands live in
+# $PLEASE_CONFIG_DIR/cache.json (most recent first, capped at 30).
+# Entries are keyed by working directory + request, since the same words
+# can mean a different command elsewhere. Every helper fails soft — the
+# cache must never break the main flow.
+_please_cache_max=30
+
+# Print the cached entry (compact JSON) for $1 in $PWD, or fail on miss.
+_please_cache_lookup() {
+  local request="$1" file="$PLEASE_CONFIG_DIR/cache.json" entry
+  [[ -f "$file" ]] || return 1
+  entry="$(jq -c --arg dir "$PWD" --arg req "$request" '
+    (if type == "array" then . else [] end)
+    | map(select(.dir == $dir and .request == $req)) | .[0] // empty
+  ' "$file" 2>/dev/null)" || return 1
+  [[ -n "$entry" ]] || return 1
+  # Only replay well-formed entries with a known risk level.
+  print -r -- "$entry" | jq -e '
+    (.command // "") != "" and (.risk == "safe" or .risk == "risky")
+  ' >/dev/null 2>&1 || return 1
+  print -r -- "$entry"
+}
+
+# Remember an accepted command. $1 request, $2 command, $3 risk.
+_please_cache_put() {
+  local request="$1" command="$2" risk="$3"
+  local file="$PLEASE_CONFIG_DIR/cache.json" tmp
+  [[ -n "$command" ]] || return 0
+  [[ "$risk" == safe || "$risk" == risky ]] || return 0
+  mkdir -p "$PLEASE_CONFIG_DIR" 2>/dev/null || return 0
+  tmp="$(mktemp "${TMPDIR:-/tmp}/please-cache.XXXXXX")" || return 0
+  if [[ -f "$file" ]] && jq -e 'type == "array"' "$file" >/dev/null 2>&1; then
+    jq -c --arg dir "$PWD" --arg req "$request" --arg cmd "$command" --arg rsk "$risk" '
+      map(select(.dir != $dir or .request != $req))
+      | [{dir: $dir, request: $req, command: $cmd, risk: $rsk}] + . | .[0:30]
+    ' "$file" >"$tmp" 2>/dev/null || { rm -f "$tmp"; return 0; }
+  else
+    jq -n -c --arg dir "$PWD" --arg req "$request" --arg cmd "$command" --arg rsk "$risk" \
+      '[{dir: $dir, request: $req, command: $cmd, risk: $rsk}]' >"$tmp" 2>/dev/null \
+      || { rm -f "$tmp"; return 0; }
+  fi
+  mv -f "$tmp" "$file" 2>/dev/null || rm -f "$tmp"
+  return 0
+}
+
+# Forget the cached entry for $1 in $PWD (used on N).
+_please_cache_drop() {
+  local request="$1" file="$PLEASE_CONFIG_DIR/cache.json" tmp
+  [[ -f "$file" ]] || return 0
+  tmp="$(mktemp "${TMPDIR:-/tmp}/please-cache.XXXXXX")" || return 0
+  jq -c --arg dir "$PWD" --arg req "$request" '
+    if type == "array"
+    then map(select(.dir != $dir or .request != $req))
+    else [] end
+  ' "$file" >"$tmp" 2>/dev/null || { rm -f "$tmp"; return 0; }
+  mv -f "$tmp" "$file" 2>/dev/null || rm -f "$tmp"
+  return 0
+}
+
 unalias please 2>/dev/null
 unalias pls 2>/dev/null
 
@@ -187,33 +246,42 @@ please() {
   fi
 
   local payload cmd risk needs_context agent_prompt complete_status out
-  local agent model
+  local agent model request entry from_cache=0
   agent="$(_please_agent)"
   model="$(_please_model)"
   if [[ -n "$model" ]]; then
     export PLEASE_MODEL="$model"
   fi
-  out="$(mktemp "${TMPDIR:-/tmp}/please.XXXXXX")" || return 1
+  request="$*"
+  if entry="$(_please_cache_lookup "$request")"; then
+    # Cache hit: replay instantly, no model call, no spinner.
+    from_cache=1
+    cmd="$(print -r -- "$entry" | jq -r .command)"
+    risk="$(print -r -- "$entry" | jq -r .risk)"
+    needs_context="false"
+  else
+    out="$(mktemp "${TMPDIR:-/tmp}/please.XXXXXX")" || return 1
 
-  _please_fetch_payload "$out" "$@"
-  complete_status=$?
-  if (( complete_status == 130 )); then
+    _please_fetch_payload "$out" "$@"
+    complete_status=$?
+    if (( complete_status == 130 )); then
+      rm -f "$out"
+      return 130
+    fi
+
+    payload="$(<"$out")"
     rm -f "$out"
-    return 130
-  fi
 
-  payload="$(<"$out")"
-  rm -f "$out"
-
-  (( complete_status == 0 )) || return $complete_status
-  if ! print -r -- "$payload" | jq -e 'type == "object"' >/dev/null 2>&1; then
-    print -u2 "please: please-complete returned something that is not JSON"
-    return 1
+    (( complete_status == 0 )) || return $complete_status
+    if ! print -r -- "$payload" | jq -e 'type == "object"' >/dev/null 2>&1; then
+      print -u2 "please: please-complete returned something that is not JSON"
+      return 1
+    fi
+    cmd="$(print -r -- "$payload" | jq -r .command)"
+    risk="$(print -r -- "$payload" | jq -r .risk)"
+    needs_context="$(print -r -- "$payload" | jq -r .needs_context)"
+    agent_prompt="$(print -r -- "$payload" | jq -r .agent_prompt)"
   fi
-  cmd="$(print -r -- "$payload" | jq -r .command)"
-  risk="$(print -r -- "$payload" | jq -r .risk)"
-  needs_context="$(print -r -- "$payload" | jq -r .needs_context)"
-  agent_prompt="$(print -r -- "$payload" | jq -r .agent_prompt)"
 
   if [[ "$needs_context" == "true" ]]; then
     if [[ -z "$agent_prompt" || "$agent_prompt" == null ]]; then
@@ -252,9 +320,15 @@ please() {
     printf '\033[1;97;48;2;255;99;71m risky \033[0m \033[38;2;255;99;71m%s\033[0m\n' "$cmd"
   fi
   print
+  if (( from_cache )); then
+    printf '\033[2mfrom cache \u2014 N forgets it\033[0m\n'
+    print
+  fi
   if _please_confirm "Run this command? [y/N] "; then
+    _please_cache_put "$request" "$cmd" "$risk"
     eval "$cmd"
   else
+    (( from_cache )) && _please_cache_drop "$request"
     return 1
   fi
 }
