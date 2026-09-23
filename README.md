@@ -13,6 +13,7 @@ please fix the failing test in this repo
 
 `please` prints one command with a risk badge: green `safe` or tomato
 `risky`. Press `y` to run it. Enter or ESC exits without running anything.
+`pls` is an alias for `please` (both skip glob expansion).
 
 When a request needs files or folders first, `please` hands off to a coding
 agent instead. It shows the agent prompt and asks before it starts the agent.
@@ -55,7 +56,8 @@ The first `please` run starts the setup wizard. It asks for:
 2. A default OpenRouter model (`z-ai/glm-5.3:nitro` is prefilled; `:nitro`
    routes to the fastest providers).
 3. A default agent from the ones on your PATH (`pi`, `claude`, `codex`,
-   `cursor-agent`, `prime-agent`, `command-code`). The agent runs when a
+   `cursor-agent`, `prime-agent`, `command-code`). If none of them is
+   installed, setup accepts any agent name instead. The agent runs when a
    request needs files, folders, or more context.
 
 Each answer is saved before the next question. To run setup again later:
@@ -68,10 +70,10 @@ please --setup --agent pi   # skip the agent picker
 ## Options
 
 ```bash
-please --help      # Show help
-please --version   # Show the installed version
-please --update    # Install the latest version
-please --setup     # Run the setup wizard again
+please --help        # Show help (-h works too)
+please --version     # Show the installed version (-V works too)
+please --update      # Install the latest version (via npm or pnpm)
+please --setup       # Run the setup wizard again
 ```
 
 After `--update`, reload with `source ~/.zshrc`.
@@ -79,7 +81,8 @@ After `--update`, reload with `source ~/.zshrc`.
 ## How it works
 
 `please` is a zsh function, so commands run in your current shell. Setup adds
-one line to `~/.zshrc` (and replaces it if it is already there):
+a marked block to `~/.zshrc` (between `# please-cli` markers, replaced if it
+is already there):
 
 ```bash
 source "$(please-setup zsh-path)"
