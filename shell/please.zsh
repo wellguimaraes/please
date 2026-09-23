@@ -16,6 +16,8 @@ if [[ -z "${OPENROUTER_API_KEY:-}" ]]; then
 fi
 
 _please_config_value() {
+  # `##` needs EXTENDED_GLOB; it is off by default in zsh.
+  setopt localoptions extendedglob
   local key="$1"
   local pattern="$2"
   local line value=""

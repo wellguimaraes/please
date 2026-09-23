@@ -1,5 +1,5 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { CONFIG_FILE, KEY_FILE } from "./paths.js";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { CONFIG_DIR, CONFIG_FILE, KEY_FILE } from "./paths.js";
 
 export const DEFAULT_MODEL = "z-ai/glm-5.3";
 
@@ -43,6 +43,7 @@ export function readConfig(): PleaseConfig {
 }
 
 export function writeConfig(partial: Partial<PleaseConfig>): void {
+  mkdirSync(CONFIG_DIR, { recursive: true, mode: 0o700 });
   const current = readConfig();
   const next = { ...current, ...partial };
   writeFileSync(
