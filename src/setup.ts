@@ -3,7 +3,6 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { ZSHRC, packageZshPath } from "./paths.js";
-import { hasCommand, runWizard } from "./wizard.js";
 
 function usage(): void {
   console.log(`usage: please-setup [--agent NAME] [zsh-path]
@@ -52,7 +51,20 @@ function parseArgs(argv: string[]): { agent: string; zshPathOnly: boolean } {
 function hookZshrc(): void {
   const begin = "# please-cli";
   const end = "# end please-cli";
-  const sourceLine = 'source "$(please-setup zsh-path)"';
+  // Resolve the absolute path now, while node is known to work. Shell
+  // startup then needs neither node nor PATH for the common case; the
+  // dynamic lookup stays as a fallback (e.g. after `please --update`
+  // moves the package). Throws here instead of writing a broken hook.
+  let abs: string;
+  try {
+    abs = quoteZsh(packageZshPath());
+  } catch {
+    console.error("please: installation is broken (shell/please.zsh is missing).");
+    console.error("Reinstall @wellg/please and run please --setup again.");
+    process.exit(1);
+  }
+  const sourceLine =
+    `if [[ -f ${abs} ]]; then\n  source ${abs}\nelif command -v please-setup >/dev/null 2>&1; then\n  source "$(please-setup zsh-path)" 2>/dev/null || true\nfi`;
   const block = `${begin}\n${sourceLine}\n${end}`;
   const text = existsSync(ZSHRC) ? readFileSync(ZSHRC, "utf8") : "";
   const pattern = new RegExp(
@@ -83,6 +95,10 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+function quoteZsh(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
 function ensureZsh(): void {
   // The zsh function sets this when it calls setup, which also covers users
   // who run zsh under a different login shell.
@@ -100,6 +116,9 @@ function ensureZsh(): void {
 
 export async function runSetup(options: { agent?: string } = {}): Promise<void> {
   ensureZsh();
+  // Lazy-load the wizard so `please-setup zsh-path` (which runs on every
+  // shell startup) stays fast and never depends on @inquirer/prompts.
+  const { hasCommand, runWizard } = await import("./wizard.js");
   if (!hasCommand("jq")) {
     console.error("please: missing jq");
     process.exit(1);

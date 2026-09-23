@@ -85,8 +85,15 @@ a marked block to `~/.zshrc` (between `# please-cli` markers, replaced if it
 is already there):
 
 ```bash
-source "$(please-setup zsh-path)"
+if [[ -f '/path/to/please/shell/please.zsh' ]]; then
+  source '/path/to/please/shell/please.zsh'
+elif command -v please-setup >/dev/null 2>&1; then
+  source "$(please-setup zsh-path)" 2>/dev/null || true
+fi
 ```
+
+Setup resolves the absolute path when it runs (the dynamic lookup is only
+a fallback, e.g. after `please --update` moves the package).
 
 Keep the global bin directory on your `PATH`.
 
