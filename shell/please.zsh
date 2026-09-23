@@ -102,7 +102,7 @@ please() {
   fi
 
   if _please_setup_needed; then
-    command please-setup || return $?
+    PLEASE_FROM_ZSH=1 command please-setup || return $?
     _please_load_key
   fi
 

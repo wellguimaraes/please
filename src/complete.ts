@@ -1,9 +1,11 @@
 #!/usr/bin/env node
 
 import { resolveModel } from "./config.js";
+import { platformLabel } from "./paths.js";
 
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 const RISKS = new Set(["safe", "risky"]);
+const PLATFORM = platformLabel();
 
 const RESPONSE_FORMAT = {
   type: "json_schema",
@@ -16,7 +18,7 @@ const RESPONSE_FORMAT = {
         command: {
           type: "string",
           description:
-            "A single zsh command for macOS. No markdown, no explanation, and no quotes around the whole command. Empty if needs_context is true.",
+            `A single zsh command for ${PLATFORM}. No markdown, no explanation, and no quotes around the whole command. Empty if needs_context is true.`,
         },
         risk: {
           type: "string",
@@ -130,7 +132,7 @@ async function complete(prompt: string): Promise<PleaseResult> {
   }
 
   const cwd = process.env.PWD || process.cwd();
-  const system = `You convert the user's request into a single zsh command for macOS.
+  const system = `You convert the user's request into a single zsh command for ${PLATFORM}.
 
 Current directory: ${cwd}
 
@@ -159,7 +161,7 @@ When needs_context is false:
   or otherwise harm the system or data. Use "safe" for read-only or otherwise
   harmless commands.
 
-Prefer common, safe macOS / Unix commands.
+Prefer common, safe commands for ${PLATFORM}.
 Use the current directory unless the user asks otherwise.
 If the request cannot be turned into a command and also does not need project
 context, set command to:

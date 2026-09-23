@@ -83,7 +83,23 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+function ensureZsh(): void {
+  // The zsh function sets this when it calls setup, which also covers users
+  // who run zsh under a different login shell.
+  if ((process.env.PLEASE_FROM_ZSH ?? "") === "1") {
+    return;
+  }
+  const shell = (process.env.SHELL ?? "").trim().split("/").pop() ?? "";
+  if (shell === "" || shell === "zsh") {
+    return;
+  }
+  console.error(`please: zsh is required, but your shell is ${shell}.`);
+  console.error("Switch to zsh, then run please-setup again.");
+  process.exit(1);
+}
+
 export async function runSetup(options: { agent?: string } = {}): Promise<void> {
+  ensureZsh();
   if (!hasCommand("jq")) {
     console.error("please: missing jq");
     process.exit(1);

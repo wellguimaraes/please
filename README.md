@@ -10,11 +10,12 @@ please fix the failing test in this repo
 ```
 
 Uses OpenRouter and your `OPENROUTER_API_KEY`. The default model is
-`z-ai/glm-5.3`.
+`z-ai/glm-5.3:nitro` (`:nitro` routes to the fastest providers).
 
 ## Install
 
-Needs Node.js 18+, `jq`, and zsh.
+Needs Node.js 18+, `jq`, and zsh. Works on macOS and Linux. Other shells
+are not supported.
 
 ```bash
 npm install -g @wellg/please
@@ -24,7 +25,7 @@ please
 The first run asks for:
 
 1. An OpenRouter API key. If a key is already set, it asks whether to keep it
-2. A default OpenRouter model (`z-ai/glm-5.3` is prefilled)
+2. A default OpenRouter model (`z-ai/glm-5.3:nitro` is prefilled)
 3. A default agent from the ones it finds on your PATH (`pi`, `claude`,
    `codex`, `cursor-agent`, `prime-agent`, `command-code`). That agent is used
    when a request needs files, folders, or more context

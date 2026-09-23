@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { CONFIG_DIR, CONFIG_FILE, KEY_FILE } from "./paths.js";
 
-export const DEFAULT_MODEL = "z-ai/glm-5.3";
+export const DEFAULT_MODEL = "z-ai/glm-5.3:nitro";
 
 export type PleaseConfig = {
   agent: string;

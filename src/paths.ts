@@ -20,6 +20,16 @@ export function packageZshPath(): string {
   return candidate;
 }
 
+export function platformLabel(): string {
+  if (process.platform === "darwin") {
+    return "macOS";
+  }
+  if (process.platform === "linux") {
+    return "Linux";
+  }
+  return "Unix";
+}
+
 export function packageVersion(): string {
   const here = dirname(fileURLToPath(import.meta.url));
   const pkgFile = join(here, "..", "package.json");
