@@ -19,7 +19,7 @@ agent instead. It shows the agent prompt and asks before it starts the agent.
 
 ## Install
 
-Needs Node.js 18+, `jq`, and zsh. Works on macOS and Linux. Other shells
+Needs Node.js 20+, `jq`, and zsh. Works on macOS and Linux. Other shells
 are not supported.
 
 npm:

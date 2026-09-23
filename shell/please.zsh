@@ -101,6 +101,47 @@ _please_confirm() {
 unalias please 2>/dev/null
 unalias pls 2>/dev/null
 
+# Fetch the completion payload into a file ($1), with a spinner. Runs in its
+# own function so nomonitor and the INT trap do not leak into eval.
+_please_fetch_payload() {
+  setopt localoptions nomonitor localtraps
+  local out="$1"
+  shift
+  local spinner_pid complete_pid complete_status interrupted=0
+
+  {
+    local frames=('|' '/' '-' $'\\')
+    local i=1
+    while true; do
+      printf '\r[%1s] Loading...\e[K' "${frames[i]}" >&2
+      i=$(( i % $#frames + 1 ))
+      sleep 0.1
+    done
+  } &
+  spinner_pid=$!
+
+  command please-complete "$@" >"$out" &
+  complete_pid=$!
+  trap '
+    interrupted=1
+    kill '"$spinner_pid"' '"$complete_pid"' 2>/dev/null
+    printf "\r\e[K" >&2
+  ' INT TERM
+
+  wait "$complete_pid"
+  complete_status=$?
+
+  kill "$spinner_pid" 2>/dev/null
+  wait "$spinner_pid" 2>/dev/null
+  printf '\r\e[K' >&2
+  trap - INT TERM
+
+  if (( interrupted )); then
+    return 130
+  fi
+  return $complete_status
+}
+
 please() {
   if (( $# == 0 )); then
     print -u2 'usage: please do something'
@@ -145,46 +186,18 @@ please() {
     return 1
   fi
 
-  local payload cmd risk needs_context agent_prompt complete_status
-  local spinner_pid complete_pid out interrupted
+  local payload cmd risk needs_context agent_prompt complete_status out
   local agent model
   agent="$(_please_agent)"
   model="$(_please_model)"
   if [[ -n "$model" ]]; then
     export PLEASE_MODEL="$model"
   fi
-  setopt localoptions nomonitor localtraps
   out="$(mktemp "${TMPDIR:-/tmp}/please.XXXXXX")" || return 1
-  interrupted=0
 
-  {
-    local frames=('|' '/' '-' $'\\')
-    local i=1
-    while true; do
-      printf '\r[%1s] Loading...\e[K' "${frames[i]}" >&2
-      i=$(( i % $#frames + 1 ))
-      sleep 0.1
-    done
-  } &
-  spinner_pid=$!
-
-  command please-complete "$@" >"$out" &
-  complete_pid=$!
-  trap '
-    interrupted=1
-    kill '"$spinner_pid"' '"$complete_pid"' 2>/dev/null
-    printf "\r\e[K" >&2
-  ' INT TERM
-
-  wait "$complete_pid"
+  _please_fetch_payload "$out" "$@"
   complete_status=$?
-
-  kill "$spinner_pid" 2>/dev/null
-  wait "$spinner_pid" 2>/dev/null
-  printf '\r\e[K' >&2
-  trap - INT TERM
-
-  if (( interrupted )); then
+  if (( complete_status == 130 )); then
     rm -f "$out"
     return 130
   fi
@@ -193,6 +206,10 @@ please() {
   rm -f "$out"
 
   (( complete_status == 0 )) || return $complete_status
+  if ! print -r -- "$payload" | jq -e 'type == "object"' >/dev/null 2>&1; then
+    print -u2 "please: please-complete returned something that is not JSON"
+    return 1
+  fi
   cmd="$(print -r -- "$payload" | jq -r .command)"
   risk="$(print -r -- "$payload" | jq -r .risk)"
   needs_context="$(print -r -- "$payload" | jq -r .needs_context)"
@@ -220,6 +237,11 @@ please() {
 
   if [[ -z "$cmd" || "$cmd" == null ]]; then
     print -u2 "please: no command came back"
+    return 1
+  fi
+
+  if ! zsh -n -c "$cmd" 2>/dev/null; then
+    print -u2 "please: the command does not parse"
     return 1
   fi
 

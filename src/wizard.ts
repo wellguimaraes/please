@@ -2,7 +2,12 @@ import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { confirm, input, password, select } from "@inquirer/prompts";
 import { CONFIG_DIR, KEY_FILE } from "./paths.js";
-import { DEFAULT_MODEL, hasExistingKey, writeConfig } from "./config.js";
+import {
+  DEFAULT_MODEL,
+  MODEL_PATTERN,
+  hasExistingKey,
+  writeConfig,
+} from "./config.js";
 
 const KNOWN_AGENTS = [
   "pi",
@@ -62,7 +67,7 @@ async function pickModel(): Promise<string> {
       message: "Default OpenRouter model",
       default: DEFAULT_MODEL,
       validate: (value) =>
-        /^[A-Za-z0-9._:/-]+$/.test(value.trim()) ? true : "Enter a model id",
+        MODEL_PATTERN.test(value.trim()) ? true : "Enter a model id",
     })
   ).trim();
   writeConfig({ model });

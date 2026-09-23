@@ -18,26 +18,31 @@ const RESPONSE_FORMAT = {
         command: {
           type: "string",
           description:
-            `A single zsh command for ${PLATFORM}. Quote paths and arguments that can contain spaces or special characters. No markdown, no explanation, and no quotes around the whole command. Empty if needs_context is true.`,
+            `A single zsh command for ${PLATFORM}. Empty if needs_context is true.`,
         },
         risk: {
           type: "string",
           enum: ["safe", "risky"],
           description:
-            "risky if the command can delete, overwrite, change permissions, use sudo, send data, kill processes, or otherwise harm the system or data. Otherwise safe. Use safe when needs_context is true.",
+            "risky unless the command only reads and prints. Use safe when needs_context is true.",
         },
         needs_context: {
           type: "boolean",
           description:
-            "true if a reliable command requires reading files, listing folders, or inspecting the project. false if one command is enough.",
+            "True only if you must look at files or folders before you can write the command.",
         },
         agent_prompt: {
           type: "string",
           description:
             "If needs_context is true, the initial prompt for a coding agent: what the user wants and what to inspect. Empty otherwise.",
         },
+        reason: {
+          type: "string",
+          description:
+            "Why the request cannot be turned into a command. Empty unless command is empty and needs_context is false.",
+        },
       },
-      required: ["command", "risk", "needs_context", "agent_prompt"],
+      required: ["command", "risk", "needs_context", "agent_prompt", "reason"],
       additionalProperties: false,
     },
   },
@@ -50,14 +55,33 @@ type PleaseResult = {
   agent_prompt: string;
 };
 
+type OpenRouterChoice = {
+  finish_reason?: unknown;
+  error?: { message?: unknown };
+  message?: { content?: unknown };
+};
+
+type OpenRouterPayload = {
+  error?: { message?: unknown; code?: unknown };
+  choices?: OpenRouterChoice[];
+};
+
 function fail(message: string, code = 1): never {
   console.error(`please: ${message}`);
   process.exit(code);
 }
 
+function describeFetchError(error: unknown): string {
+  if (error instanceof Error && error.name === "TimeoutError") {
+    return "OpenRouter did not answer within 90s";
+  }
+  const reason = error instanceof Error ? error.message : String(error);
+  return `could not reach OpenRouter: ${reason}`;
+}
+
 function stripFences(text: string): string {
   const trimmed = text.trim();
-  const fence = trimmed.match(/^```(?:[a-zA-Z0-9_-]+)?\n(.*)\n```$/s);
+  const fence = trimmed.match(/^```[^\n`]*\s*([\s\S]*?)\s*```$/);
   if (fence) {
     return fence[1].trim();
   }
@@ -67,12 +91,30 @@ function stripFences(text: string): string {
   return trimmed;
 }
 
+function extractJson(text: string): unknown {
+  const clean = stripFences(text);
+  try {
+    return JSON.parse(clean);
+  } catch {
+    // Fall through to the brace search.
+  }
+  const start = clean.indexOf("{");
+  const end = clean.lastIndexOf("}");
+  if (start !== -1 && end > start) {
+    return JSON.parse(clean.slice(start, end + 1));
+  }
+  throw new Error("no JSON found");
+}
+
 function messageText(content: unknown): string {
   if (Array.isArray(content)) {
     return content
       .map((part) => {
         if (part && typeof part === "object" && "text" in part) {
           return String((part as { text?: unknown }).text ?? "");
+        }
+        if (part && typeof part === "object") {
+          return JSON.stringify(part);
         }
         return String(part);
       })
@@ -88,13 +130,13 @@ function asBool(value: unknown): boolean {
   if (typeof value === "string") {
     return ["true", "1", "yes"].includes(value.trim().toLowerCase());
   }
-  return Boolean(value);
+  return false;
 }
 
 function parseResult(content: string): PleaseResult {
   let data: unknown;
   try {
-    data = JSON.parse(stripFences(content));
+    data = extractJson(content);
   } catch {
     fail("OpenRouter did not return valid JSON");
   }
@@ -105,9 +147,16 @@ function parseResult(content: string): PleaseResult {
 
   const record = data as Record<string, unknown>;
   const needsContext = asBool(record.needs_context);
-  const command = String(record.command ?? "").trim();
+  const command = stripFences(String(record.command ?? ""));
+  if (/[\u0000-\u0008\u000b-\u001f\u007f]/.test(command)) {
+    fail("OpenRouter returned a command with control characters");
+  }
   if (!command && !needsContext) {
-    fail("OpenRouter returned an empty command");
+    fail(
+      String(record.reason ?? "").trim() ||
+        "OpenRouter returned an empty command",
+      2,
+    );
   }
 
   let risk = String(record.risk ?? "")
@@ -132,95 +181,178 @@ async function complete(prompt: string): Promise<PleaseResult> {
   }
 
   const cwd = process.env.PWD || process.cwd();
+  const tools =
+    PLATFORM === "macOS"
+      ? "macOS ships BSD tools (sed -i '', date -v, stat -f): do not use GNU-only flags.\n\n"
+      : "";
   const system = `You convert the user's request into a single zsh command for ${PLATFORM}.
+
+The command runs with eval in the user's interactive zsh session: their
+aliases expand, and cd, export, alias, and source take effect immediately.
+Pipes, &&, and ; still count as one command.
 
 Current directory: ${cwd}
 
-Return structured JSON with:
+${tools}Return structured JSON with:
 - command: one shell command. No markdown, no explanation, no quotes around the whole command.
 - risk: "safe" or "risky"
 - needs_context: true or false
 - agent_prompt: a prompt for a coding agent, or empty
+- reason: why the request cannot be turned into a command, or empty
 
-Set needs_context to true when you cannot write a reliable command without reading
-files, listing folders, or inspecting the project. Examples: the request depends on
-file contents, repo layout, which files match, or a choice you cannot see from the
-request and current directory path alone.
+Set needs_context to true only if you would need to look at files or
+folders before you could write the command. Reading files as part of
+running the command (cat, ls, grep) does not count.
 
 When needs_context is true:
 - set command to an empty string
 - set risk to "safe"
+- set reason to an empty string
 - set agent_prompt to a short initial prompt for a coding agent that can read files
   and run commands. Include the user's request, the current directory, and what to
   inspect.
 
 When needs_context is false:
 - set agent_prompt to an empty string
-- mark risk as "risky" when the command can delete, overwrite, move, change
-  permissions, use sudo, send data over the network, kill processes, format disks,
-  or otherwise harm the system or data. Use "safe" for read-only or otherwise
-  harmless commands.
+- if no command can do what the user asks, set command to an empty string
+  and set reason to one sentence that says why
+- otherwise set reason to an empty string
+
+risk is "safe" only when the command just reads and prints (ls, cat, grep,
+find without -delete or -exec, git status/log/diff, curl or wget that only
+prints to stdout). Everything else is "risky": creating, appending to,
+editing, moving, or deleting files or settings (>, >>, tee, sed -i, cp, mv,
+rm, git commit/push/reset/checkout, brew/npm/pip install, defaults write,
+launchctl, chmod/chown), sudo, kill, uploading data, or running code
+fetched from the network.
+
+Quoting rules. In zsh an unquoted ? * [ ] with no matching file is an
+error, not a literal.
+- Quote every URL, and every path or argument that contains anything other
+  than letters, digits, and _ - . / : = @ + ,
+- Use single quotes for literal text. Nothing is escaped inside them. A
+  single quote cannot appear inside them: write it as '\\'' or use double
+  quotes on the outside instead.
+- Use double quotes only when a $VAR must expand. Inside them, write \\\" \\\$ \\\` \\\\
+  for a literal double quote, dollar, backtick, or backslash.
+- Keep ~ outside quotes: "~/x" does not expand. Write ~/"Some Dir" or
+  "$HOME/Some Dir".
+- To append shell code (alias, export, function) to a file, use a quoted
+  heredoc so nothing inside needs escaping:
+  cat >> ~/.zshrc <<'EOF'
+  alias weather='curl -s "wttr.in/City?format=3"'
+  EOF
 
 Prefer common, safe commands for ${PLATFORM}.
-Quote file paths and arguments that can contain spaces or shell
-special characters. Use single quotes for literal text and double
-quotes when a variable must expand.
 Use the current directory unless the user asks otherwise.
-If the request cannot be turned into a command and also does not need project
-context, set command to:
-echo 'please: cannot turn that into a command'
-and set risk to "safe".
 `;
 
-  let response: Response;
-  try {
-    response = await fetch(OPENROUTER_URL, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-        "HTTP-Referer": "https://localhost",
-        "X-Title": "please",
-      },
-      body: JSON.stringify({
-        model: resolveModel(),
-        temperature: 0,
-        reasoning: { effort: "high" },
-        messages: [
-          { role: "system", content: system },
-          { role: "user", content: prompt },
-        ],
-        response_format: RESPONSE_FORMAT,
-      }),
-      signal: AbortSignal.timeout(60_000),
-    });
-  } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error);
-    fail(`could not reach OpenRouter: ${reason}`);
-  }
-
-  const payload = (await response.json()) as {
-    error?: { message?: string };
-    choices?: Array<{ message?: { content?: unknown } }>;
+  const baseBody = {
+    model: resolveModel(),
+    reasoning: { effort: "medium" },
+    messages: [
+      { role: "system", content: system },
+      { role: "user", content: prompt },
+    ],
+    response_format: RESPONSE_FORMAT,
+    provider: { require_parameters: true },
   };
 
-  if (!response.ok) {
-    const detail = payload.error?.message || JSON.stringify(payload);
-    fail(`OpenRouter HTTP ${response.status}: ${detail}`);
+  async function attempt(includeTemperature: boolean): Promise<{
+    ok: boolean;
+    status: number;
+    payload: OpenRouterPayload;
+  }> {
+    const body = includeTemperature
+      ? { ...baseBody, temperature: 0 }
+      : baseBody;
+    let response: Response;
+    try {
+      response = await fetch(OPENROUTER_URL, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+          "HTTP-Referer": "https://localhost",
+          "X-Title": "please",
+        },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(90_000),
+      });
+    } catch (error) {
+      fail(describeFetchError(error));
+    }
+    let raw: string;
+    try {
+      raw = await response.text();
+    } catch (error) {
+      fail(describeFetchError(error));
+    }
+    let payload: OpenRouterPayload = {};
+    try {
+      payload = JSON.parse(raw) as OpenRouterPayload;
+    } catch {
+      fail(
+        `OpenRouter HTTP ${response.status} ${response.statusText}: ${raw.slice(0, 200).trim()}`,
+      );
+    }
+    return {
+      ok: response.status >= 200 && response.status < 300,
+      status: response.status,
+      payload,
+    };
   }
 
-  if (payload.error) {
-    fail(payload.error.message || String(payload.error));
+  function mentionsTemperature(payload: OpenRouterPayload): boolean {
+    const message =
+      typeof payload.error?.message === "string"
+        ? payload.error.message
+        : JSON.stringify(payload);
+    return message.toLowerCase().includes("temperature");
   }
 
-  const choices = payload.choices ?? [];
+  let result = await attempt(true);
+  if (result.status === 400 && mentionsTemperature(result.payload)) {
+    result = await attempt(false);
+  }
+
+  if (!result.ok) {
+    const detail =
+      typeof result.payload.error?.message === "string" &&
+      result.payload.error.message
+        ? result.payload.error.message
+        : JSON.stringify(result.payload.error ?? result.payload);
+    fail(`OpenRouter HTTP ${result.status}: ${detail}`);
+  }
+
+  if (result.payload.error) {
+    const detail =
+      typeof result.payload.error.message === "string"
+        ? result.payload.error.message
+        : JSON.stringify(result.payload.error);
+    fail(detail || JSON.stringify(result.payload));
+  }
+
+  const choices = result.payload.choices ?? [];
   if (choices.length === 0) {
     fail("OpenRouter returned no choices");
   }
 
-  const content = messageText(choices[0]?.message?.content);
+  const choice = choices[0];
+  if (choice.error) {
+    const detail =
+      typeof choice.error.message === "string"
+        ? choice.error.message
+        : JSON.stringify(choice.error);
+    fail(`OpenRouter provider error: ${detail}`);
+  }
+  if (choice.finish_reason === "length") {
+    fail("OpenRouter cut the answer short (finish_reason=length)");
+  }
+
+  const content = messageText(choice.message?.content);
   if (!content) {
-    fail("OpenRouter returned an empty command");
+    fail("OpenRouter returned an empty reply");
   }
 
   return parseResult(content);

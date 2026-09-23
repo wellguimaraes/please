@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { CONFIG_DIR, CONFIG_FILE, KEY_FILE } from "./paths.js";
 
 export const DEFAULT_MODEL = "z-ai/glm-5.3:nitro";
+export const MODEL_PATTERN = /^[A-Za-z0-9._:/-]+$/;
 
 export type PleaseConfig = {
   agent: string;
@@ -34,7 +35,7 @@ export function readConfig(): PleaseConfig {
     }
     if (line.startsWith("PLEASE_MODEL=")) {
       const value = stripQuotes(line.slice("PLEASE_MODEL=".length));
-      if (/^[A-Za-z0-9._:/-]+$/.test(value)) {
+      if (MODEL_PATTERN.test(value)) {
         result.model = value;
       }
     }
@@ -59,7 +60,7 @@ export function setupComplete(): boolean {
 
 export function resolveModel(): string {
   const fromEnv = (process.env.PLEASE_MODEL ?? "").trim();
-  if (fromEnv) {
+  if (fromEnv && MODEL_PATTERN.test(fromEnv)) {
     return fromEnv;
   }
   return readConfig().model || DEFAULT_MODEL;
