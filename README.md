@@ -23,10 +23,13 @@ please
 
 The first run asks for:
 
-1. A default agent from the ones it finds on your PATH (`pi`, `claude`,
-   `codex`, `cursor-agent`, `prime-agent`, `command-code`)
+1. An OpenRouter API key. If a key is already set, it asks whether to keep it
 2. A default OpenRouter model (`z-ai/glm-5.3` is prefilled)
-3. An OpenRouter API key. If a key is already set, it asks whether to keep it
+3. A default agent from the ones it finds on your PATH (`pi`, `claude`,
+   `codex`, `cursor-agent`, `prime-agent`, `command-code`). That agent is used
+   when a request needs files, folders, or more context
+
+Each answer is saved before the next question.
 
 Then reload:
 

@@ -42,8 +42,13 @@ export function readConfig(): PleaseConfig {
   return result;
 }
 
-export function writeConfig(agent: string, model: string): void {
-  writeFileSync(CONFIG_FILE, `PLEASE_AGENT=${agent}\nPLEASE_MODEL=${model}\n`);
+export function writeConfig(partial: Partial<PleaseConfig>): void {
+  const current = readConfig();
+  const next = { ...current, ...partial };
+  writeFileSync(
+    CONFIG_FILE,
+    `PLEASE_AGENT=${next.agent}\nPLEASE_MODEL=${next.model}\n`,
+  );
 }
 
 export function setupComplete(): boolean {
