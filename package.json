@@ -1,6 +1,6 @@
 {
   "name": "@wellg/please",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Turn a short request into a confirmed shell command.",
   "type": "module",
   "license": "MIT",
@@ -12,6 +12,7 @@
     "url": "git+https://github.com/wellguimaraes/please.git"
   },
   "bin": {
+    "please": "dist/please.js",
     "please-complete": "dist/complete.js",
     "please-setup": "dist/setup.js"
   },

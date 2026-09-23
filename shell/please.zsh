@@ -4,21 +4,29 @@
 
 PLEASE_CONFIG_DIR="${PLEASE_CONFIG_DIR:-$HOME/.config/please}"
 
-if [[ -z "${OPENROUTER_API_KEY:-}" && -f "$PLEASE_CONFIG_DIR/key" ]]; then
-  OPENROUTER_API_KEY="$(<"$PLEASE_CONFIG_DIR/key")"
-  export OPENROUTER_API_KEY
+_please_load_key() {
+  if [[ -f "$PLEASE_CONFIG_DIR/key" ]]; then
+    OPENROUTER_API_KEY="$(<"$PLEASE_CONFIG_DIR/key")"
+    export OPENROUTER_API_KEY
+  fi
+}
+
+if [[ -z "${OPENROUTER_API_KEY:-}" ]]; then
+  _please_load_key
 fi
 
-_please_agent() {
-  local line value agent=""
-  if [[ -n "${PLEASE_AGENT:-}" && "$PLEASE_AGENT" == [A-Za-z0-9._-]## ]]; then
-    print -r -- "$PLEASE_AGENT"
+_please_config_value() {
+  local key="$1"
+  local pattern="$2"
+  local line value=""
+  if [[ -n "${(P)key}" && "${(P)key}" == $~pattern ]]; then
+    print -r -- "${(P)key}"
     return 0
   fi
   if [[ -f "$PLEASE_CONFIG_DIR/config" ]]; then
     while IFS= read -r line || [[ -n "$line" ]]; do
-      [[ "$line" == PLEASE_AGENT=* ]] || continue
-      value="${line#PLEASE_AGENT=}"
+      [[ "$line" == ${key}=* ]] || continue
+      value="${line#${key}=}"
       if [[ "$value" == \'*\' ]]; then
         value="${value#\'}"
         value="${value%\'}"
@@ -26,12 +34,28 @@ _please_agent() {
         value="${value#\"}"
         value="${value%\"}"
       fi
-      if [[ "$value" == [A-Za-z0-9._-]## ]]; then
-        agent="$value"
+      if [[ "$value" == $~pattern ]]; then
+        print -r -- "$value"
+        return 0
       fi
     done < "$PLEASE_CONFIG_DIR/config"
   fi
-  print -r -- "${agent:-pi}"
+  return 1
+}
+
+_please_agent() {
+  _please_config_value PLEASE_AGENT '[A-Za-z0-9._-]##'
+}
+
+_please_model() {
+  _please_config_value PLEASE_MODEL '[A-Za-z0-9._:/-]##'
+}
+
+_please_setup_needed() {
+  local agent model
+  agent="$(_please_agent)"
+  model="$(_please_model)"
+  [[ -z "$agent" || -z "$model" ]]
 }
 
 _please_run_agent() {
@@ -52,18 +76,13 @@ unalias please 2>/dev/null
 unalias pls 2>/dev/null
 
 please() {
-  if [[ -z "${OPENROUTER_API_KEY:-}" ]]; then
-    print -u2 "please: OPENROUTER_API_KEY is not set"
-    return 1
-  fi
-
   if (( $# == 0 )); then
     print -u2 'usage: please do something'
     return 1
   fi
 
-  if ! command -v please-complete >/dev/null; then
-    print -u2 "please: please-complete is not on PATH. Run: npm install -g @wellg/please"
+  if ! command -v please-complete >/dev/null || ! command -v please-setup >/dev/null; then
+    print -u2 "please: @wellg/please is not on PATH. Run: npm install -g @wellg/please"
     return 1
   fi
 
@@ -72,10 +91,27 @@ please() {
     return 1
   fi
 
+  if _please_setup_needed; then
+    command please-setup || return $?
+    _please_load_key
+  fi
+
+  if [[ -z "${OPENROUTER_API_KEY:-}" ]]; then
+    _please_load_key
+  fi
+  if [[ -z "${OPENROUTER_API_KEY:-}" ]]; then
+    print -u2 "please: OPENROUTER_API_KEY is not set"
+    return 1
+  fi
+
   local payload cmd risk needs_context agent_prompt complete_status
   local spinner_pid complete_pid out interrupted reply
-  local agent
+  local agent model
   agent="$(_please_agent)"
+  model="$(_please_model)"
+  if [[ -n "$model" ]]; then
+    export PLEASE_MODEL="$model"
+  fi
   setopt localoptions nomonitor localtraps
   out="$(mktemp "${TMPDIR:-/tmp}/please.XXXXXX")" || return 1
   interrupted=0

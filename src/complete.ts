@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 
+import { resolveModel } from "./config.js";
+
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
-const MODEL = "z-ai/glm-5.3";
 const RISKS = new Set(["safe", "risky"]);
 
 const RESPONSE_FORMAT = {
@@ -177,7 +178,7 @@ and set risk to "safe".
         "X-Title": "please",
       },
       body: JSON.stringify({
-        model: MODEL,
+        model: resolveModel(),
         temperature: 0,
         reasoning: { effort: "high" },
         messages: [
